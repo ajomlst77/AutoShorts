@@ -19,9 +19,11 @@ class MainActivity : ComponentActivity() {
 
     setContent {
       MaterialTheme {
-        AutoShortsScreen { uri ->
-          Exporter.exportToAppFolder(this@MainActivity, uri)
-        }
+        AutoShortsScreen(
+          onExport = { uri ->
+            Exporter.exportToAppFolder(this@MainActivity, uri)
+          }
+        )
       }
     }
   }
@@ -32,34 +34,6 @@ private fun AutoShortsScreen(
   onExport: (Uri) -> String
 ) {
   var videoUri by remember { mutableStateOf<Uri?>(null) }
-  var status by remember { mutableStateOf("Klik Import Video") }
-
-  val picker = rememberLauncherForActivityResult(
-    contract = ActivityResultContracts.PickVisualMedia()
-  ) { uri ->
-    videoUri = uri
-    status = if (uri != null) "Video dipilih ✅" else "Batal memilih video"
-  }
-
-  Column(
-    modifier = Modifier.fillMaxSize().padding(16.dp)
-  ) {
-    Text("AutoShorts MVP", style = MaterialTheme.typography.titleLarge)
-    Spacer(Modifier.height(12.dp))
-
-    Button(onClick = {
-      picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
-    }) { Text("Import Video") }
-
-    Spacer(Modifier.height(12.dp))
-    Text(status)
-
-    Spacer(Modifier.height(24.dp))
-    Button(enabled = videoUri != null, onClick = {
-      status = onExport(videoUri!!)
-    }) { Text("Export") }
-  }
-}
   var status by remember { mutableStateOf("Klik Import Video") }
 
   val picker = rememberLauncherForActivityResult(
@@ -85,34 +59,9 @@ private fun AutoShortsScreen(
     Text(status)
 
     Spacer(Modifier.height(24.dp))
-    Button(enabled = videoUri != null, onClick = {
-      status = onExport(videoUri!!)
-    }) {
-      Text("Export")
-    }
-  }
-}
-            picker.launch(
-              PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
-            )
-          }) { Text("Import Video") }
-
-          Spacer(Modifier.height(12.dp))
-          Text(status)
-
-          Spacer(Modifier.height(24.dp))
-          Button(enabled = videoUri != null, onClick = {
-            Button(enabled = videoUri != null, onClick = {
-  status = Exporter.exportToDownloads(this@MainActivity, videoUri!!)
-}) {
-  Text("Export")
-}
-
-          }) {
-            Text("Export (nanti)")
-          }
-        }
-      }
-    }
+    Button(
+      enabled = videoUri != null,
+      onClick = { status = onExport(videoUri!!) }
+    ) { Text("Export") }
   }
 }
