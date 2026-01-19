@@ -14,26 +14,58 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 class MainActivity : ComponentActivity() {
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
     setContent {
       MaterialTheme {
-        var videoUri by remember { mutableStateOf<Uri?>(null) }
-        var status by remember { mutableStateOf("Klik Import Video") }
-
-        val picker = rememberLauncherForActivityResult(
-          contract = ActivityResultContracts.PickVisualMedia()
-        ) { uri ->
-          videoUri = uri
-          status = if (uri != null) "Video dipilih ✅" else "Batal memilih video"
+        AutoShortsScreen { uri ->
+          // ini dieksekusi di Activity (bukan Composable)
+          Exporter.exportToAppFolder(this@MainActivity, uri)
         }
+      }
+    }
+  }
+}
 
-        Column(Modifier.fillMaxSize().padding(16.dp)) {
-          Text("AutoShorts MVP", style = MaterialTheme.typography.titleLarge)
-          Spacer(Modifier.height(12.dp))
+@Composable
+private fun AutoShortsScreen(
+  onExport: (Uri) -> String
+) {
+  var videoUri by remember { mutableStateOf<Uri?>(null) }
+  var status by remember { mutableStateOf("Klik Import Video") }
 
-          Button(onClick = {
+  val picker = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.PickVisualMedia()
+  ) { uri ->
+    videoUri = uri
+    status = if (uri != null) "Video dipilih ✅" else "Batal memilih video"
+  }
+
+  Column(
+    modifier = Modifier
+      .fillMaxSize()
+      .padding(16.dp)
+  ) {
+    Text("AutoShorts MVP", style = MaterialTheme.typography.titleLarge)
+    Spacer(Modifier.height(12.dp))
+
+    Button(onClick = {
+      picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+    }) { Text("Import Video") }
+
+    Spacer(Modifier.height(12.dp))
+    Text(status)
+
+    Spacer(Modifier.height(24.dp))
+    Button(enabled = videoUri != null, onClick = {
+      status = onExport(videoUri!!)
+    }) {
+      Text("Export")
+    }
+  }
+}
             picker.launch(
               PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
             )
