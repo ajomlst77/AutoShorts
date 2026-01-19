@@ -44,7 +44,12 @@ class MainActivity : ComponentActivity() {
 
           Spacer(Modifier.height(24.dp))
           Button(enabled = videoUri != null, onClick = {
-            status = "Export akan ditambahkan di step berikutnya ✅"
+            Button(enabled = videoUri != null, onClick = {
+  status = Exporter.exportToDownloads(this@MainActivity, videoUri!!)
+}) {
+  Text("Export")
+}
+
           }) {
             Text("Export (nanti)")
           }
