@@ -4,87 +4,76 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 class MainActivity : ComponentActivity() {
-
-    private var pickedVideoUri: Uri? = null
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val pickVideoLauncher = registerForActivityResult(
-            ActivityResultContracts.GetContent()
-        ) { uri ->
-            pickedVideoUri = uri
+        setContent {
+            AppUI()
+        }
+    }
+}
+
+@Composable
+fun AppUI() {
+
+    val context = LocalContext.current
+
+    var videoUri by remember { mutableStateOf<Uri?>(null) }
+    var status by remember { mutableStateOf("Belum pilih video") }
+
+    val picker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            videoUri = uri
+            status = "Video berhasil dipilih ✔"
+        } else {
+            status = "Pemilihan video dibatalkan"
+        }
+    }
+
+    Column(modifier = Modifier.padding(24.dp)) {
+
+        Text("AutoShorts MVP", style = MaterialTheme.typography.headlineMedium)
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Button(onClick = {
+            picker.launch("video/*")
+        }) {
+            Text("Import Video")
         }
 
-        setContent {
-            MaterialTheme {
-                var status by remember { mutableStateOf("Belum pilih video") }
-                var uiVideoUri by remember { mutableStateOf<Uri?>(null) }
+        Spacer(modifier = Modifier.height(12.dp))
 
-                // sync state dari launcher
-                LaunchedEffect(pickedVideoUri) {
-                    uiVideoUri = pickedVideoUri
-                    if (uiVideoUri != null) status = "Video dipilih ✔"
-                }
+        Text(status)
 
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Text(
-                        text = "AutoShorts MVP",
-                        style = MaterialTheme.typography.headlineMedium
-                    )
+        Spacer(modifier = Modifier.height(24.dp))
 
-                    Button(
-                        onClick = {
-                            pickVideoLauncher.launch("video/*")
-                        }
-                    ) {
-                        Text("Import Video")
-                    }
-
-                    Text(status)
-
-                    Button(
-                        onClick = {
-                            val videoUri = uiVideoUri
-                            if (videoUri == null) {
-                                status = "Pilih video dulu!"
-                                return@Button
-                            }
-
-                            try {
-                                val result = Exporter.export(
-                                    context = this@MainActivity,
-                                    videoUri = videoUri,
-                                    transcriptText = "Ini transcript contoh\nBaris kedua\nBaris ketiga",
-                                    metaText = "Score: 87\nHook: Emosional\nStyle: Alex Hormozi",
-                                    clipName = "autos"
-                                )
-                                status = "Export selesai ✔\nFolder:\n${result.folder.absolutePath}"
-                            } catch (e: Exception) {
-                                status = "Export gagal ❌\n${e.message}"
-                            }
-                        },
-                        enabled = (uiVideoUri != null)
-                    ) {
-                        Text("Export (sementara)")
-                    }
-                }
+        Button(
+            enabled = videoUri != null,
+            onClick = {
+                val result = Exporter.export(
+                    context = context,
+                    videoUri = videoUri!!,
+                    transcriptText = "Transcript contoh",
+                    metaText = "Meta contoh",
+                    clipName = "autos"
+                )
+                status = "Export sukses:\n${result.folder.absolutePath}"
             }
+        ) {
+            Text("Export")
         }
     }
 }
