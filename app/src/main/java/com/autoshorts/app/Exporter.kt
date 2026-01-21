@@ -2,10 +2,8 @@ package com.autoshorts.app
 
 import android.content.Context
 import android.net.Uri
-import android.os.Environment
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.*
+import java.io.FileOutputStream
 
 object Exporter {
 
@@ -16,35 +14,17 @@ object Exporter {
         meta: String
     ) {
 
-        val time = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val folder = File(context.getExternalFilesDir(null), "AutoShorts")
+        folder.mkdirs()
 
-        val root = File(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
-            "AutoShorts/$time"
-        )
+        File(folder, "meta.txt").writeText(meta)
+        File(folder, "transcript.srt").writeText(transcript)
 
-        if (!root.exists()) root.mkdirs()
+        val input = context.contentResolver.openInputStream(videoUri) ?: return
+        val output = FileOutputStream(File(folder, "source.mp4"))
 
-        // --- COPY VIDEO ---
-        val videoOut = File(root, "source.mp4")
-        context.contentResolver.openInputStream(videoUri)?.use { input ->
-            videoOut.outputStream().use { output ->
-                input.copyTo(output)
-            }
-        }
-
-        // --- SAVE META ---
-        File(root, "meta.txt").writeText(meta)
-
-        // --- SAVE SRT ---
-        File(root, "subtitle.srt").writeText(buildSrt(transcript))
-    }
-
-    private fun buildSrt(text: String): String {
-        return """
-1
-00:00:00,000 --> 00:00:03,000
-$text
-""".trimIndent()
+        input.copyTo(output)
+        input.close()
+        output.close()
     }
 }
