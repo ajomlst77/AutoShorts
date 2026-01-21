@@ -19,9 +19,62 @@ import com.autoshorts.app.ai.HormoziCaption
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
-    super.onCreate(savedInstanceState)
+    super.onCreate(savedInstanceState) 
+    val pickLauncher = rememberLauncherForActivityResult(
+    ActivityResultContracts.GetContent()
+) { uri ->
+    if (uri != null) {
+        videoUri = uri
+    }
+    }
+    
 
     setContent {
+    val context = LocalContext.current
+    var videoUri by remember { mutableStateOf<Uri?>(null) }
+    var status by remember { mutableStateOf("") }
+
+    Column(modifier = Modifier.padding(16.dp)) {
+
+        Button(onClick = {
+            pickLauncher.launch("video/*")
+        }) {
+            Text("Import Video")
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        if (videoUri != null) {
+            Text("Video dipilih ✔")
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Button(
+            enabled = videoUri != null,
+            onClick = {
+                val baseName = "clip_${System.currentTimeMillis()}"
+
+                val r1 = Exporter.exportToAppFolder(context, videoUri!!)
+                val r2 = Exporter.writeMeta(context, baseName)
+                val r3 = Exporter.writeSrt(
+                    context,
+                    baseName,
+                    "INI CONTOH TRANSKRIP SEMENTARA UNTUK TEST"
+                )
+
+                status = "$r1\n\n$r2\n\n$r3"
+            }
+        ) {
+            Text("Export")
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text(status)
+    }
+    }
+    
       MaterialTheme {
         AutoShortsScreen(  var candidates by remember { mutableStateOf<List<ClipCandidate>>(emptyList()) }
   var selectedIdx by remember { mutableStateOf(0) }
