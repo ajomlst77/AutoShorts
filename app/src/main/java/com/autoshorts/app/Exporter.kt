@@ -13,87 +13,106 @@ object Exporter {
     data class ExportResult(
         val folder: File,
         val videoFile: File,
-        val metaFile: File,
-        val srtFile: File
+        val srtFile: File,
+        val metaFile: File
     )
 
+    /**
+     * STEP 3:
+     * - bikin folder output
+     * - simpan meta.txt + captions.srt
+     * - copy video full jadi source.mp4
+     */
     fun export(
         context: Context,
         videoUri: Uri,
         transcriptText: String,
         metaText: String,
-        clipName: String = "clip"
+        clipName: String
     ): ExportResult {
 
-        // 1) Root folder: /Android/data/<package>/files/AutoShorts
-        val root = File(context.getExternalFilesDir(null), "AutoShorts")
-        root.mkdirs()
+        // 1) Tentukan base folder (aman tanpa permission tambahan)
+        val baseDir = File(context.getExternalFilesDir(null), "AutoShorts")
+        if (!baseDir.exists()) baseDir.mkdirs()
 
-        // 2) Sub folder per export: clip_yyyyMMdd_HHmmss
+        // 2) Buat folder unik per export
         val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val safeName = clipName.trim().ifEmpty { "clip" }
-            .replace(Regex("[^a-zA-Z0-9_\\-]"), "_")
+        val outDir = File(baseDir, "${clipName}_$stamp")
+        if (!outDir.exists()) outDir.mkdirs()
 
-        val outDir = File(root, "${safeName}_$stamp")
-        outDir.mkdirs()
+        // 3) File output
+        val videoOut = File(outDir, "source.mp4")
+        val metaOut = File(outDir, "meta.txt")
+        val srtOut = File(outDir, "captions.srt")
 
-        // 3) Save meta.txt
-        val metaFile = File(outDir, "meta.txt")
-        metaFile.writeText(metaText)
+        // 4) Copy video full (sementara)
+        copyUriToFile(context, videoUri, videoOut)
 
-        // 4) Save captions.srt
-        val srtFile = File(outDir, "captions.srt")
-        val srtContent = toSimpleSrt(transcriptText)
-        srtFile.writeText(srtContent)
+        // 5) Simpan meta.txt
+        metaOut.writeText(metaText)
 
-        // 5) Copy full video -> source.mp4
-        val videoFile = File(outDir, "source.mp4")
-        context.contentResolver.openInputStream(videoUri).use { input ->
-            requireNotNull(input) { "Gagal membuka videoUri (inputStream null)" }
-            FileOutputStream(videoFile).use { output ->
-                input.copyTo(output)
-            }
-        }
+        // 6) Buat SRT sederhana dari transcriptText
+        val srtText = transcriptToSimpleSrt(transcriptText)
+        srtOut.writeText(srtText)
 
         return ExportResult(
             folder = outDir,
-            videoFile = videoFile,
-            metaFile = metaFile,
-            srtFile = srtFile
+            videoFile = videoOut,
+            srtFile = srtOut,
+            metaFile = metaOut
         )
     }
 
-    private fun toSimpleSrt(text: String): String {
-        val lines = text
-            .replace("\r\n", "\n")
+    private fun copyUriToFile(context: Context, uri: Uri, outFile: File) {
+        context.contentResolver.openInputStream(uri).use { input ->
+            requireNotNull(input) { "Gagal membuka video dari Uri" }
+            FileOutputStream(outFile).use { output ->
+                input.copyTo(output)
+            }
+        }
+    }
+
+    /**
+     * SRT super sederhana:
+     * - setiap baris transcript = 2 detik
+     * - kalau kosong, bikin 1 caption default
+     */
+    private fun transcriptToSimpleSrt(transcript: String): String {
+        val lines = transcript
             .split("\n")
             .map { it.trim() }
             .filter { it.isNotEmpty() }
 
-        if (lines.isEmpty()) {
-            return "1\n00:00:00,000 --> 00:00:02,000\n(Empty)\n\n"
-        }
+        val safeLines = if (lines.isEmpty()) listOf("Caption belum ada") else lines
 
         val sb = StringBuilder()
         var startMs = 0L
         val durMs = 2000L
 
-        lines.forEachIndexed { idx, line ->
+        safeLines.forEachIndexed { idx, text ->
             val endMs = startMs + durMs
-            sb.append("${idx + 1}\n")
-            sb.append("${fmtSrtTime(startMs)} --> ${fmtSrtTime(endMs)}\n")
-            sb.append(line)
-            sb.append("\n\n")
+            sb.append(idx + 1).append("\n")
+            sb.append(msToSrtTime(startMs))
+                .append(" --> ")
+                .append(msToSrtTime(endMs))
+                .append("\n")
+            sb.append(text).append("\n\n")
             startMs = endMs
         }
+
         return sb.toString()
     }
 
-    private fun fmtSrtTime(ms: Long): String {
-        val h = ms / 3_600_000
-        val m = (ms % 3_600_000) / 60_000
-        val s = (ms % 60_000) / 1_000
-        val msPart = ms % 1_000
-        return String.format(Locale.US, "%02d:%02d:%02d,%03d", h, m, s, msPart)
+    private fun msToSrtTime(ms: Long): String {
+        val totalSeconds = ms / 1000
+        val milli = ms % 1000
+        val seconds = totalSeconds % 60
+        val minutes = (totalSeconds / 60) % 60
+        val hours = (totalSeconds / 3600)
+
+        fun pad2(v: Long) = v.toString().padStart(2, '0')
+        fun pad3(v: Long) = v.toString().padStart(3, '0')
+
+        return "${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)},${pad3(milli)}"
     }
 }
