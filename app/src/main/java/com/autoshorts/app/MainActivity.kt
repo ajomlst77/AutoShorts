@@ -57,7 +57,15 @@ fun AppUI() {
 
         Button(onClick = {
             if (videoUri != null) {
-                Exporter.export(
+                Exporter.export(val result = Exporter.export(
+    context = context,
+    videoUri = videoUri!!,
+    transcriptText = "Ini transcript sementara\nBaris kedua\nBaris ketiga",
+    metaText = "Score: 87\nHook: Emosional\nStyle: Alex Hormozi",
+    clipName = "autos"
+)
+
+status = "Export selesai ✔\n${result.folder.absolutePath}"
                     context = context,
                     videoUri = videoUri!!,
                     transcript = "Ini transcript sementara",
