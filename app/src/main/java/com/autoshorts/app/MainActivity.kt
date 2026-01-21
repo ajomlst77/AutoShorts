@@ -14,10 +14,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 class MainActivity : ComponentActivity() {
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         setContent {
             AppUI()
         }
@@ -29,13 +27,12 @@ fun AppUI() {
 
     val context = LocalContext.current
 
-    // ✅ FIX: tipe + nilai awal
     var videoUri by remember { mutableStateOf<Uri?>(null) }
     var status by remember { mutableStateOf("Belum ada video") }
 
     val picker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
+    ) { uri ->
         videoUri = uri
         status = if (uri != null) "Video dipilih ✔" else "Batal"
     }
@@ -73,64 +70,3 @@ fun AppUI() {
         }
     }
 }
-    }
-
-    Column(modifier = Modifier.padding(24.dp)) {
-
-        Text("AutoShorts MVP", style = MaterialTheme.typography.headlineMedium)
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Button(onClick = {
-            picker.launch("video/*")
-        }) {
-            Text("Import Video")
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(status)
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Button(
-            onClick = {
-                if (videoUri != null) {
-                    Exporter.export(
-                        context = LocalContext.current,
-                        videoUri = videoUri!!,
-                        transcript = "Ini contoh transcript sementara",
-                        meta = "Score: 87\nHook: Konten emosional\nStyle: Alex Hormozi"
-                    )
-                    status = "Export selesai ✔"
-                }
-            }
-        ) {
-            Text("Export (sementara)")
-        }
-    }
-}
-
-    Column(modifier = Modifier.padding(16.dp)) {
-
-        Button(onClick = {
-            pickLauncher.launch("video/*")
-        }) {
-            Text("Import Video")
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        if (videoUri != null) {
-            Text("Video dipilih ✔")
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Button(
-            enabled = videoUri != null,
-            onClick = {
-                val baseName = "clip_${System.currentTimeMillis()}"
-
-                val r1 = Exporter.exportToAppFolder(context, videoUri!!)
-                val r2
