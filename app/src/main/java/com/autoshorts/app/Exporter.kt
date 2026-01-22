@@ -1,23 +1,29 @@
 package com.autoshorts.app
 
-import android.content.Context
 import android.os.Environment
 import java.io.File
 
 object Exporter {
 
-    fun export(context: Context): String {
-        val dir = File(
+    fun export(): String {
+        // Folder: Movies/AutoShorts
+        val outputDir = File(
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
             "AutoShorts"
         )
 
-        if (!dir.exists()) {
-            dir.mkdirs()
+        if (!outputDir.exists()) {
+            outputDir.mkdirs()
         }
 
-        val outputFile = File(dir, "result_${System.currentTimeMillis()}.txt")
-        outputFile.writeText("Export berhasil")
+        // File hasil export
+        val outputFile = File(
+            outputDir,
+            "export_${System.currentTimeMillis()}.txt"
+        )
+
+        // Isi contoh (nanti bisa diganti hasil video / proses lain)
+        outputFile.writeText("Export berhasil dari AutoShorts")
 
         return outputFile.absolutePath
     }
