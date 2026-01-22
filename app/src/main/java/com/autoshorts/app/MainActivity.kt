@@ -18,14 +18,14 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme {
-                AutoShortsUI()
+                AppUI()
             }
         }
     }
 
     @Composable
-    fun AutoShortsUI() {
-        var status by remember { mutableStateOf("Siap export") }
+    fun AppUI() {
+        var status by remember { mutableStateOf("Siap") }
 
         Column(
             modifier = Modifier.fillMaxSize(),
@@ -33,27 +33,24 @@ class MainActivity : ComponentActivity() {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
-            Text("AutoShorts MVP")
+            Text("AutoShorts")
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            Button(
-                onClick = {
-                    // 🔥 INI FIX UTAMA
-                    val resultPath = Exporter.export(applicationContext)
-                    status = "Hasil export:\n$resultPath"
+            Button(onClick = {
+                val path = Exporter.export(applicationContext)
+                status = "Export sukses:\n$path"
 
-                    Toast.makeText(
-                        applicationContext,
-                        "Export sukses",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            ) {
+                Toast.makeText(
+                    applicationContext,
+                    "Export OK",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }) {
                 Text("Export")
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Text(status)
         }
