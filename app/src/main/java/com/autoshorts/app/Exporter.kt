@@ -7,8 +7,7 @@ import android.os.Build
 import android.provider.MediaStore
 import java.io.InputStream
 import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.util.*
 
 object Exporter {
 
@@ -26,85 +25,86 @@ object Exporter {
         transcriptText: String,
         metaText: String
     ): ExportResult {
+
         return try {
             val time = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-            val folderName = "AutoShorts/Export_$time"
+            val folder = "AutoShorts/Export_$time/"
 
-            // 1) Copy video to Movies/AutoShorts/Export_xxx/input_video.mp4 (via MediaStore)
-            val outVideoUri = createMediaStoreFile(
-                context = context,
-                relativePath = "Movies/$folderName/",
-                displayName = "input_video.mp4",
-                mimeType = "video/mp4"
-            )
-            copyUriToUri(context, inputVideoUri, outVideoUri)
+            val videoOut = createFile(context, folder, "input_video.mp4", "video/mp4")
+            copyUri(context, inputVideoUri, videoOut)
 
-            // 2) Save SRT to Movies/AutoShorts/Export_xxx/subtitle.srt
-            val outSrtUri = createMediaStoreFile(
-                context = context,
-                relativePath = "Movies/$folderName/",
-                displayName = "subtitle.srt",
-                mimeType = "application/x-subrip"
-            )
-            writeTextToUri(context, outSrtUri, transcriptText)
+            val srtOut = createFile(context, folder, "subtitle.srt", "application/x-subrip")
+            writeText(context, srtOut, transcriptText)
 
-            // 3) Save meta to Movies/AutoShorts/Export_xxx/meta.txt
-            val outMetaUri = createMediaStoreFile(
-                context = context,
-                relativePath = "Movies/$folderName/",
-                displayName = "meta.txt",
-                mimeType = "text/plain"
-            )
-            writeTextToUri(context, outMetaUri, metaText)
+            val metaOut = createFile(context, folder, "meta.txt", "text/plain")
+            writeText(context, metaOut, metaText)
 
             ExportResult(
-                success = true,
-                message = "Export selesai ✅\nCek: Internal Storage > Movies > AutoShorts > Export_$time",
-                videoUri = outVideoUri.toString(),
-                srtUri = outSrtUri.toString(),
-                metaUri = outMetaUri.toString()
+                true,
+                "Export sukses ✅\nCek: Movies/AutoShorts/Export_$time",
+                videoOut.toString(),
+                srtOut.toString(),
+                metaOut.toString()
             )
 
         } catch (e: Exception) {
-            ExportResult(
-                success = false,
-                message = "Export gagal ❌\n${e.message}"
-            )
+            ExportResult(false, "Export gagal ❌\n${e.message}")
         }
     }
 
-    // ===== Helpers =====
-
-    private fun createMediaStoreFile(
+    private fun createFile(
         context: Context,
         relativePath: String,
-        displayName: String,
-        mimeType: String
+        name: String,
+        mime: String
     ): Uri {
-        val values = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
-            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                // Scoped Storage: path relatif di storage publik
-                put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+            put(MediaStore.MediaColumns.MIME_TYPE, mime)
+            if (Build.VERSION.SDK_INT >= 29) {
+                put(MediaStore.MediaColumns.RELATIVE_PATH, "Movies/$relativePath")
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
         }
 
-        val collection = MediaStore.Files.getContentUri("external")
-        val uri = context.contentResolver.insert(collection, values)
-            ?: throw IllegalStateException("Gagal membuat file MediaStore: $displayName")
+        val uri = context.contentResolver.insert(
+            MediaStore.Files.getContentUri("external"),
+            values
+        ) ?: throw Exception("Gagal buat file: $name")
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // Selesai buat, tapi masih pending sampai kita tulis isi
-            // (nanti setelah nulis kita set IS_PENDING = 0)
-        }
         return uri
     }
 
-    private fun copyUriToUri(context: Context, from: Uri, to: Uri) {
+    private fun copyUri(context: Context, from: Uri, to: Uri) {
         val resolver = context.contentResolver
 
         val input: InputStream = resolver.openInputStream(from)
-            ?: throw
+            ?: throw Exception("Tidak bisa baca video input")
+
+        resolver.openOutputStream(to)?.use { out ->
+            input.use { it.copyTo(out) }
+        }
+
+        if (Build.VERSION.SDK_INT >= 29) {
+            val values = ContentValues()
+            values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+            resolver.update(to, values, null, null)
+        }
+    }
+
+    private fun writeText(context: Context, uri: Uri, text: String) {
+        val resolver = context.contentResolver
+
+        resolver.openOutputStream(uri)?.use { out ->
+            out.write(text.toByteArray(Charsets.UTF_8))
+            out.flush()
+        }
+
+        if (Build.VERSION.SDK_INT >= 29) {
+            val values = ContentValues()
+            values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+            resolver.update(uri, values, null, null)
+        }
+    }
+}
