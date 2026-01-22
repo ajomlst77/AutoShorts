@@ -1,4 +1,4 @@
-package com.autoshorts.app
+upackage com.autoshorts.app
 
 import android.content.Intent
 import android.net.Uri
