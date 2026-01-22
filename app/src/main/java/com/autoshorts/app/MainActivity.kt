@@ -16,15 +16,14 @@ import androidx.compose.ui.unit.dp
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         setContent {
-            AppUI()
+            AutoShortsUI()
         }
     }
 }
 
 @Composable
-fun AppUI() {
+fun AutoShortsUI() {
 
     val context = LocalContext.current
 
@@ -32,7 +31,7 @@ fun AppUI() {
     var status by remember { mutableStateOf("Belum pilih video") }
 
     val picker = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
+        contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
             videoUri = uri
@@ -42,11 +41,18 @@ fun AppUI() {
         }
     }
 
-    Column(modifier = Modifier.padding(24.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp)
+    ) {
 
-        Text("AutoShorts MVP", style = MaterialTheme.typography.headlineMedium)
+        Text(
+            text = "AutoShorts MVP",
+            style = MaterialTheme.typography.headlineMedium
+        )
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         Button(onClick = {
             picker.launch("video/*")
@@ -63,14 +69,17 @@ fun AppUI() {
         Button(
             enabled = videoUri != null,
             onClick = {
-                val result = Exporter.export(
+                val transcriptText = "Transcript sementara..."
+                val metaText = "Judul: Contoh\nHook: Emosional\nStyle: Alex Hormozi"
+
+                Exporter.export(
                     context = context,
-                    videoUri = videoUri!!,
-                    transcriptText = "Transcript contoh",
-                    metaText = "Meta contoh",
-                    clipName = "autos"
+                    sourceVideoUri = videoUri!!,
+                    transcriptText = transcriptText,
+                    metaText = metaText
                 )
-                status = "Export sukses:\n${result.folder.absolutePath}"
+
+                status = "Export selesai ✔\nCek folder Movies/AutoShorts"
             }
         ) {
             Text("Export")
