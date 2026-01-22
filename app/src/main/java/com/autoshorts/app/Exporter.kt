@@ -1,9 +1,13 @@
 package com.autoshorts.app
 
+import android.content.ContentResolver
+import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
-import java.io.File
-import java.io.FileOutputStream
+import android.os.Build
+import android.provider.MediaStore
+import java.io.BufferedWriter
+import java.io.OutputStreamWriter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -11,108 +15,122 @@ import java.util.Locale
 object Exporter {
 
     data class ExportResult(
-        val folder: File,
-        val videoFile: File,
-        val srtFile: File,
-        val metaFile: File
+        val folderName: String,
+        val videoUri: Uri?,
+        val metaUri: Uri?,
+        val srtUri: Uri?
     )
 
     /**
-     * STEP 3:
-     * - bikin folder output
-     * - simpan meta.txt + captions.srt
-     * - copy video full jadi source.mp4
+     * STEP 3 Export:
+     * - buat folder di Movies/AutoShorts/<timestamp>/
+     * - simpan meta.txt
+     * - simpan captions.srt
+     * - copy video full (sementara)
      */
     fun export(
         context: Context,
-        videoUri: Uri,
+        sourceVideoUri: Uri,
         transcriptText: String,
-        metaText: String,
-        clipName: String
+        metaText: String
     ): ExportResult {
 
-        // 1) Tentukan base folder (aman tanpa permission tambahan)
-        val baseDir = File(context.getExternalFilesDir(null), "AutoShorts")
-        if (!baseDir.exists()) baseDir.mkdirs()
+        val ts = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val folderName = "AutoShorts/$ts" // di dalam Movies/
 
-        // 2) Buat folder unik per export
-        val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val outDir = File(baseDir, "${clipName}_$stamp")
-        if (!outDir.exists()) outDir.mkdirs()
+        val resolver = context.contentResolver
 
-        // 3) File output
-        val videoOut = File(outDir, "source.mp4")
-        val metaOut = File(outDir, "meta.txt")
-        val srtOut = File(outDir, "captions.srt")
+        // 1) Copy video full -> Movies/AutoShorts/<ts>/video.mp4
+        val outVideoUri = createMediaStoreFile(
+            resolver = resolver,
+            relativePath = "Movies/$folderName",
+            displayName = "video_full.mp4",
+            mimeType = "video/mp4"
+        )
 
-        // 4) Copy video full (sementara)
-        copyUriToFile(context, videoUri, videoOut)
+        if (outVideoUri != null) {
+            copyUri(resolver, sourceVideoUri, outVideoUri)
+        }
 
-        // 5) Simpan meta.txt
-        metaOut.writeText(metaText)
+        // 2) meta.txt
+        val metaUri = createMediaStoreFile(
+            resolver = resolver,
+            relativePath = "Movies/$folderName",
+            displayName = "meta.txt",
+            mimeType = "text/plain"
+        )
+        if (metaUri != null) {
+            writeText(resolver, metaUri, metaText)
+        }
 
-        // 6) Buat SRT sederhana dari transcriptText
-        val srtText = transcriptToSimpleSrt(transcriptText)
-        srtOut.writeText(srtText)
+        // 3) captions.srt (sementara: 1 block panjang dari transcript)
+        val srtText = buildSimpleSrtFromTranscript(transcriptText)
+        val srtUri = createMediaStoreFile(
+            resolver = resolver,
+            relativePath = "Movies/$folderName",
+            displayName = "captions.srt",
+            mimeType = "application/x-subrip"
+        )
+        if (srtUri != null) {
+            writeText(resolver, srtUri, srtText)
+        }
 
         return ExportResult(
-            folder = outDir,
-            videoFile = videoOut,
-            srtFile = srtOut,
-            metaFile = metaOut
+            folderName = "Movies/$folderName",
+            videoUri = outVideoUri,
+            metaUri = metaUri,
+            srtUri = srtUri
         )
     }
 
-    private fun copyUriToFile(context: Context, uri: Uri, outFile: File) {
-        context.contentResolver.openInputStream(uri).use { input ->
-            requireNotNull(input) { "Gagal membuka video dari Uri" }
-            FileOutputStream(outFile).use { output ->
+    private fun buildSimpleSrtFromTranscript(transcript: String): String {
+        val cleaned = transcript.trim().ifEmpty { "(kosong)" }
+        // sementara: 1 subtitle 00:00:00 -> 00:00:20
+        return """
+1
+00:00:00,000 --> 00:00:20,000
+$cleaned
+
+""".trimIndent()
+    }
+
+    private fun createMediaStoreFile(
+        resolver: ContentResolver,
+        relativePath: String,
+        displayName: String,
+        mimeType: String
+    ): Uri? {
+        return try {
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+                put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+                }
+            }
+
+            val collection = MediaStore.Files.getContentUri("external")
+            resolver.insert(collection, values)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun copyUri(resolver: ContentResolver, from: Uri, to: Uri) {
+        resolver.openInputStream(from)?.use { input ->
+            resolver.openOutputStream(to)?.use { output ->
                 input.copyTo(output)
+                output.flush()
             }
         }
     }
 
-    /**
-     * SRT super sederhana:
-     * - setiap baris transcript = 2 detik
-     * - kalau kosong, bikin 1 caption default
-     */
-    private fun transcriptToSimpleSrt(transcript: String): String {
-        val lines = transcript
-            .split("\n")
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-
-        val safeLines = if (lines.isEmpty()) listOf("Caption belum ada") else lines
-
-        val sb = StringBuilder()
-        var startMs = 0L
-        val durMs = 2000L
-
-        safeLines.forEachIndexed { idx, text ->
-            val endMs = startMs + durMs
-            sb.append(idx + 1).append("\n")
-            sb.append(msToSrtTime(startMs))
-                .append(" --> ")
-                .append(msToSrtTime(endMs))
-                .append("\n")
-            sb.append(text).append("\n\n")
-            startMs = endMs
+    private fun writeText(resolver: ContentResolver, to: Uri, text: String) {
+        resolver.openOutputStream(to)?.use { out ->
+            BufferedWriter(OutputStreamWriter(out)).use { w ->
+                w.write(text)
+                w.flush()
+            }
         }
-
-        return sb.toString()
-    }
-
-    private fun msToSrtTime(ms: Long): String {
-        val totalSeconds = ms / 1000
-        val milli = ms % 1000
-        val seconds = totalSeconds % 60
-        val minutes = (totalSeconds / 60) % 60
-        val hours = (totalSeconds / 3600)
-
-        fun pad2(v: Long) = v.toString().padStart(2, '0')
-        fun pad3(v: Long) = v.toString().padStart(3, '0')
-
-        return "${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)},${pad3(milli)}"
     }
 }
