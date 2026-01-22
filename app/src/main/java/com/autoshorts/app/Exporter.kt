@@ -4,107 +4,112 @@ import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.MediaStore
-import java.io.InputStream
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
 
 object Exporter {
 
     data class ExportResult(
         val success: Boolean,
-        val message: String,
-        val videoUri: String? = null,
-        val srtUri: String? = null,
-        val metaUri: String? = null
+        val outputUri: Uri? = null,
+        val userPath: String? = null,
+        val errorMessage: String? = null
     )
 
-    fun export(
-        context: Context,
-        inputVideoUri: Uri,
-        transcriptText: String,
-        metaText: String
-    ): ExportResult {
+    suspend fun exportToMovies(context: Context, inputVideoUri: Uri): ExportResult {
+        return withContext(Dispatchers.IO) {
+            try {
+                val time = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+                val fileName = "AutoShorts_$time.mp4"
 
-        return try {
-            val time = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-            val folder = "AutoShorts/Export_$time/"
-
-            val videoOut = createFile(context, folder, "input_video.mp4", "video/mp4")
-            copyUri(context, inputVideoUri, videoOut)
-
-            val srtOut = createFile(context, folder, "subtitle.srt", "application/x-subrip")
-            writeText(context, srtOut, transcriptText)
-
-            val metaOut = createFile(context, folder, "meta.txt", "text/plain")
-            writeText(context, metaOut, metaText)
-
-            ExportResult(
-                true,
-                "Export sukses ✅\nCek: Movies/AutoShorts/Export_$time",
-                videoOut.toString(),
-                srtOut.toString(),
-                metaOut.toString()
-            )
-
-        } catch (e: Exception) {
-            ExportResult(false, "Export gagal ❌\n${e.message}")
+                if (Build.VERSION.SDK_INT >= 29) {
+                    // Android 10+ (Q+) -> MediaStore (tanpa WRITE_EXTERNAL_STORAGE)
+                    exportWithMediaStoreQPlus(context, inputVideoUri, fileName)
+                } else {
+                    // Android 8/9 -> File API (butuh WRITE_EXTERNAL_STORAGE)
+                    exportWithLegacyFileApi(context, inputVideoUri, fileName)
+                }
+            } catch (e: Exception) {
+                ExportResult(
+                    success = false,
+                    errorMessage = e.message ?: e.toString()
+                )
+            }
         }
     }
 
-    private fun createFile(
+    private fun exportWithMediaStoreQPlus(
         context: Context,
-        relativePath: String,
-        name: String,
-        mime: String
-    ): Uri {
+        inputUri: Uri,
+        fileName: String
+    ): ExportResult {
+        val resolver = context.contentResolver
 
         val values = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
-            put(MediaStore.MediaColumns.MIME_TYPE, mime)
-            if (Build.VERSION.SDK_INT >= 29) {
-                put(MediaStore.MediaColumns.RELATIVE_PATH, "Movies/$relativePath")
-                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            put(MediaStore.Video.Media.DISPLAY_NAME, fileName)
+            put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+            put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/AutoShorts")
+            put(MediaStore.Video.Media.IS_PENDING, 1)
+        }
+
+        val outUri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+            ?: return ExportResult(false, errorMessage = "Gagal membuat file di MediaStore")
+
+        try {
+            resolver.openInputStream(inputUri).use { input ->
+                if (input == null) return ExportResult(false, errorMessage = "Tidak bisa baca input video")
+                resolver.openOutputStream(outUri).use { output ->
+                    if (output == null) return ExportResult(false, errorMessage = "Tidak bisa tulis output video")
+                    input.copyTo(output)
+                }
+            }
+
+            // selesai tulis
+            values.clear()
+            values.put(MediaStore.Video.Media.IS_PENDING, 0)
+            resolver.update(outUri, values, null, null)
+
+            return ExportResult(
+                success = true,
+                outputUri = outUri,
+                userPath = "Movies/AutoShorts/$fileName"
+            )
+        } catch (e: Exception) {
+            // cleanup kalau gagal
+            resolver.delete(outUri, null, null)
+            return ExportResult(false, errorMessage = e.message ?: e.toString())
+        }
+    }
+
+    private fun exportWithLegacyFileApi(
+        context: Context,
+        inputUri: Uri,
+        fileName: String
+    ): ExportResult {
+        val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+        val outDir = File(moviesDir, "AutoShorts")
+        if (!outDir.exists()) outDir.mkdirs()
+
+        val outFile = File(outDir, fileName)
+
+        context.contentResolver.openInputStream(inputUri).use { input ->
+            if (input == null) return ExportResult(false, errorMessage = "Tidak bisa baca input video")
+            FileOutputStream(outFile).use { output ->
+                input.copyTo(output)
             }
         }
 
-        val uri = context.contentResolver.insert(
-            MediaStore.Files.getContentUri("external"),
-            values
-        ) ?: throw Exception("Gagal buat file: $name")
-
-        return uri
-    }
-
-    private fun copyUri(context: Context, from: Uri, to: Uri) {
-        val resolver = context.contentResolver
-
-        val input: InputStream = resolver.openInputStream(from)
-            ?: throw Exception("Tidak bisa baca video input")
-
-        resolver.openOutputStream(to)?.use { out ->
-            input.use { it.copyTo(out) }
-        }
-
-        if (Build.VERSION.SDK_INT >= 29) {
-            val values = ContentValues()
-            values.put(MediaStore.MediaColumns.IS_PENDING, 0)
-            resolver.update(to, values, null, null)
-        }
-    }
-
-    private fun writeText(context: Context, uri: Uri, text: String) {
-        val resolver = context.contentResolver
-
-        resolver.openOutputStream(uri)?.use { out ->
-            out.write(text.toByteArray(Charsets.UTF_8))
-            out.flush()
-        }
-
-        if (Build.VERSION.SDK_INT >= 29) {
-            val values = ContentValues()
-            values.put(MediaStore.MediaColumns.IS_PENDING, 0)
-            resolver.update(uri, values, null, null)
-        }
+        return ExportResult(
+            success = true,
+            outputUri = Uri.fromFile(outFile),
+            userPath = "Movies/AutoShorts/$fileName"
+        )
     }
 }
