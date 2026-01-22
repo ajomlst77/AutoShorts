@@ -7,9 +7,7 @@ pluginManagement {
 }
 
 dependencyResolutionManagement {
-    // supaya aman kalau nanti ada repo ditambah di module
-    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
-
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         google()
         mavenCentral()
