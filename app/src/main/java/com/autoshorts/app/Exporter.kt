@@ -27,46 +27,56 @@ object Exporter {
 
         return try {
 
-            // ===== Folder Movies/AutoShorts =====
-            val baseDir = Environment.get        relativeDir: String,
-        fileName: String
-    ) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val moviesDir = Environment.getExternalStoragePublicDirectory(
+                Environment.DIRECTORY_MOVIES
+            )
 
-            val values = ContentValues().apply {
-                put(MediaStore.Video.Media.DISPLAY_NAME, fileName)
-                put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-                put(MediaStore.Video.Media.RELATIVE_PATH, relativeDir)
-            }
+            val rootFolder = File(moviesDir, "AutoShorts")
+            if (!rootFolder.exists()) rootFolder.mkdirs()
 
-            val destUri = context.contentResolver.insert(
-                MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY),
-                values
-            ) ?: return
+            val time = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+            val exportFolder = File(rootFolder, "Export_$time")
+            exportFolder.mkdirs()
 
-            val input = context.contentResolver.openInputStream(sourceUri) ?: return
-            val output = context.contentResolver.openOutputStream(destUri) ?: return
+            // Copy video
+            val videoFile = File(exportFolder, "input_video.mp4")
+            copyUriToFile(context, inputVideoUri, videoFile)
 
-            input.use { ins ->
-                output.use { outs ->
-                    ins.copyTo(outs, 1024 * 1024)
-                }
-            }
+            // Save transcript
+            val srtFile = File(exportFolder, "subtitle.srt")
+            srtFile.writeText(transcriptText)
 
-        } else {
-            val base = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
-            val dir = File(base, relativeDir.removePrefix("Movies/"))
-            if (!dir.exists()) dir.mkdirs()
-            val file = File(dir, fileName)
+            // Save meta
+            val metaFile = File(exportFolder, "meta.txt")
+            metaFile.writeText(metaText)
 
-            val input = context.contentResolver.openInputStream(sourceUri) ?: return
-            val output: OutputStream = FileOutputStream(file)
+            ExportResult(
+                success = true,
+                message = "Export selesai ✅\n${exportFolder.absolutePath}",
+                outputFolder = exportFolder.absolutePath
+            )
 
-            input.use { ins ->
-                output.use { outs ->
-                    ins.copyTo(outs, 1024 * 1024)
-                }
-            }
+        } catch (e: Exception) {
+            ExportResult(
+                success = false,
+                message = "Export gagal ❌\n${e.message}"
+            )
         }
+    }
+
+    private fun copyUriToFile(
+        context: Context,
+        uri: Uri,
+        outFile: File
+    ) {
+        val inputStream: InputStream? =
+            context.contentResolver.openInputStream(uri)
+
+        val outputStream = FileOutputStream(outFile)
+
+        inputStream?.copyTo(outputStream)
+
+        inputStream?.close()
+        outputStream.close()
     }
 }
