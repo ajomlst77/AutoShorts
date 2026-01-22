@@ -1,15 +1,14 @@
 package com.autoshorts.app
 
+import android.net.Uri
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -20,50 +19,93 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            MaterialTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    MainScreen(
-                        onExportClick = {
-                            val resultPath = Exporter.export() // ✅ TANPA PARAMETER
-                            Toast.makeText(
-                                this,
-                                "Export berhasil:\n$resultPath",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        }
-                    )
+            var selectedUri by remember { mutableStateOf<Uri?>(null) }
+            var status by remember { mutableStateOf("") }
+
+            val pickVideoLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.PickVisualMedia(),
+                onResult = { uri ->
+                    selectedUri = uri
+                    status = if (uri != null) "Video dipilih ✅" else "Batal memilih video"
                 }
-            }
+            )
+
+            MainScreen(
+                selectedVideo = selectedUri,
+                statusText = status,
+                onPickVideo = {
+                    pickVideoLauncher.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
+                    )
+                },
+                onExport = {
+                    // kalau Exporter.export() butuh input video, nanti kita sambungkan dari selectedUri
+                    val result = Exporter.export()
+                    status = result
+                }
+            )
         }
     }
 }
 
 @Composable
-fun MainScreen(
-    onExportClick: () -> Unit
+private fun MainScreen(
+    selectedVideo: Uri?,
+    statusText: String,
+    onPickVideo: () -> Unit,
+    onExport: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-
-        Text(
-            text = "AutoShorts",
-            style = MaterialTheme.typography.headlineMedium
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Button(
-            onClick = onExportClick,
-            modifier = Modifier.fillMaxWidth()
+    Scaffold(
+        topBar = {
+            TopAppBar(title = { Text("AutoShorts") })
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .padding(24.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Export")
+            Text("AutoShorts", style = MaterialTheme.typography.headlineMedium)
+
+            Spacer(Modifier.height(18.dp))
+
+            Button(
+                onClick = onPickVideo,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+            ) {
+                Text("Import Video")
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Button(
+                onClick = onExport,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                enabled = selectedVideo != null
+            ) {
+                Text("Export")
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            if (selectedVideo != null) {
+                Text(
+                    text = "Dipilih: ${selectedVideo}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            if (statusText.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(statusText, style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
 }
