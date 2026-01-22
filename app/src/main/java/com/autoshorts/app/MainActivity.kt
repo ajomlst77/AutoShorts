@@ -1,97 +1,121 @@
 package com.autoshorts.app
 
-import android.Manifest
-import android.content.pm.PackageManager
+import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity() {
-
-    private var selectedVideoUri: Uri? = null
-
-    private val permissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        if (Build.VERSION.SDK_INT < 29) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
-                permissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            }
-        }
-
         setContent {
-            AppUI()
-        }
-    }
+            MaterialTheme {
+                val context = this
 
-    @Composable
-    fun AppUI() {
-        var status by remember { mutableStateOf("") }
+                var inputVideoUri by remember { mutableStateOf<Uri?>(null) }
+                var statusText by remember { mutableStateOf("Belum ada video") }
 
-        val videoPicker =
-            rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-                selectedVideoUri = uri
-                status = if (uri != null) "Video dipilih ✅" else "Batal pilih video"
-            }
+                // ✅ Launcher Import Video (pakai SAF OpenDocument, bisa persist permission)
+                val pickVideoLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.OpenDocument()
+                ) { uri: Uri? ->
+                    if (uri != null) {
+                        // ✅ Simpan permission agar bisa dibaca lagi saat export
+                        try {
+                            contentResolver.takePersistableUriPermission(
+                                uri,
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            )
+                        } catch (_: Exception) {
+                            // beberapa device tidak perlu / sudah otomatis, aman diabaikan
+                        }
 
-        Column(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-
-            Text("AutoShorts MVP", style = MaterialTheme.typography.headlineMedium)
-
-            Spacer(Modifier.height(24.dp))
-
-            Button(onClick = { videoPicker.launch("video/*") }) {
-                Text("Import Video")
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            Text(status)
-
-            Spacer(Modifier.height(24.dp))
-
-            Button(onClick = {
-                val uri = selectedVideoUri
-                if (uri == null) {
-                    status = "Pilih video dulu ❌"
-                    return@Button
+                        inputVideoUri = uri
+                        statusText = "Video diimport ✅\n$uri"
+                    } else {
+                        statusText = "Import dibatalkan"
+                    }
                 }
 
-                val result = Exporter.export(
-                    context = this@MainActivity,
-                    inputVideoUri = uri,
-                    transcriptText = "Subtitle contoh",
-                    metaText = "Meta data contoh"
-                )
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "AutoShorts MVP",
+                            style = MaterialTheme.typography.headlineLarge
+                        )
 
-                status = result.message
+                        Spacer(modifier = Modifier.height(24.dp))
 
-            }) {
-                Text("Export")
+                        Button(
+                            onClick = {
+                                // SAF OpenDocument butuh array mimeTypes
+                                pickVideoLauncher.launch(arrayOf("video/*"))
+                            },
+                            modifier = Modifier.fillMaxWidth(0.75f)
+                        ) {
+                            Text("Import Video")
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+
+                        Spacer(modifier = Modifier.height(28.dp))
+
+                        Button(
+                            onClick = {
+                                val uri = inputVideoUri
+                                if (uri == null) {
+                                    statusText = "Export gagal ❌\nKamu belum import video"
+                                    return@Button
+                                }
+
+                                // ✅ Panggil Exporter di sini
+                                // Wajib: pastikan fungsi Exporter.export(...) ada sesuai ini.
+                                val result = Exporter.export(
+                                    context = context,
+                                    inputVideoUri = uri
+                                )
+
+                                statusText = if (result.ok) {
+                                    "Export selesai ✅\n${result.message}"
+                                } else {
+                                    "Export gagal ❌\n${result.message}"
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(0.5f)
+                        ) {
+                            Text("Export")
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Text(
+                            text = "Hasil export: Movies/AutoShorts/... (lihat File Manager)",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
             }
-
-            Spacer(Modifier.height(16.dp))
-
-            Text("Hasil export: Movies/AutoShorts/...")
         }
     }
 }
