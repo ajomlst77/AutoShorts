@@ -5,9 +5,11 @@ import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.MediaStore
-import java.io.BufferedWriter
-import java.io.OutputStreamWriter
+import java.io.File
+import java.io.FileOutputStream
+import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -15,79 +17,202 @@ import java.util.Locale
 object Exporter {
 
     data class ExportResult(
-        val folderName: String,
-        val videoUri: Uri?,
-        val metaUri: Uri?,
-        val srtUri: Uri?
+        val ok: Boolean,
+        val message: String,
+        val folderHint: String = "Movies/AutoShorts",
+        val createdFiles: List<String> = emptyList()
     )
 
     /**
-     * STEP 3 Export:
-     * - buat folder di Movies/AutoShorts/<timestamp>/
-     * - simpan meta.txt
-     * - simpan captions.srt
-     * - copy video full (sementara)
+     * Export:
+     * - Folder: Movies/AutoShorts/<folderName>
+     * - Files:
+     *   - meta.txt
+     *   - captions.srt
+     *   - video_full.mp4 (copy full sementara)
      */
     fun export(
         context: Context,
-        sourceVideoUri: Uri,
+        inputVideoUri: Uri,
         transcriptText: String,
-        metaText: String
+        metaText: String,
+        folderName: String? = null
     ): ExportResult {
+        return try {
+            val safeFolder = folderName?.takeIf { it.isNotBlank() } ?: defaultFolderName()
+            val created = mutableListOf<String>()
 
-        val ts = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val folderName = "AutoShorts/$ts" // di dalam Movies/
+            // 1) Write meta.txt
+            val metaName = "meta.txt"
+            val metaOk = writeTextToMovies(
+                context = context,
+                relativeDir = "Movies/AutoShorts/$safeFolder",
+                fileName = metaName,
+                mime = "text/plain",
+                content = metaText
+            )
+            if (!metaOk) return ExportResult(false, "Gagal simpan meta.txt (cek izin/akses penyimpanan).")
+            created += "Movies/AutoShorts/$safeFolder/$metaName"
 
-        val resolver = context.contentResolver
+            // 2) Write captions.srt
+            val srtName = "captions.srt"
+            val srtOk = writeTextToMovies(
+                context = context,
+                relativeDir = "Movies/AutoShorts/$safeFolder",
+                fileName = srtName,
+                mime = "application/x-subrip",
+                content = transcriptText
+            )
+            if (!srtOk) return ExportResult(false, "Gagal simpan captions.srt (cek izin/akses penyimpanan).")
+            created += "Movies/AutoShorts/$safeFolder/$srtName"
 
-        // 1) Copy video full -> Movies/AutoShorts/<ts>/video.mp4
-        val outVideoUri = createMediaStoreFile(
-            resolver = resolver,
-            relativePath = "Movies/$folderName",
-            displayName = "video_full.mp4",
-            mimeType = "video/mp4"
-        )
+            // 3) Copy video full (sementara)
+            val videoName = "video_full.mp4"
+            val copyOk = copyVideoToMovies(
+                context = context,
+                sourceUri = inputVideoUri,
+                relativeDir = "Movies/AutoShorts/$safeFolder",
+                fileName = videoName
+            )
+            if (!copyOk) return ExportResult(false, "Gagal copy video_full.mp4 (cek file video & izin akses).")
+            created += "Movies/AutoShorts/$safeFolder/$videoName"
 
-        if (outVideoUri != null) {
-            copyUri(resolver, sourceVideoUri, outVideoUri)
+            ExportResult(
+                ok = true,
+                message = "Export selesai ✅\nCek folder: Movies/AutoShorts/$safeFolder",
+                folderHint = "Movies/AutoShorts/$safeFolder",
+                createdFiles = created
+            )
+        } catch (e: Exception) {
+            ExportResult(false, "Export error: ${e.message ?: e.javaClass.simpleName}")
         }
-
-        // 2) meta.txt
-        val metaUri = createMediaStoreFile(
-            resolver = resolver,
-            relativePath = "Movies/$folderName",
-            displayName = "meta.txt",
-            mimeType = "text/plain"
-        )
-        if (metaUri != null) {
-            writeText(resolver, metaUri, metaText)
-        }
-
-        // 3) captions.srt (sementara: 1 block panjang dari transcript)
-        val srtText = buildSimpleSrtFromTranscript(transcriptText)
-        val srtUri = createMediaStoreFile(
-            resolver = resolver,
-            relativePath = "Movies/$folderName",
-            displayName = "captions.srt",
-            mimeType = "application/x-subrip"
-        )
-        if (srtUri != null) {
-            writeText(resolver, srtUri, srtText)
-        }
-
-        return ExportResult(
-            folderName = "Movies/$folderName",
-            videoUri = outVideoUri,
-            metaUri = metaUri,
-            srtUri = srtUri
-        )
     }
 
-    private fun buildSimpleSrtFromTranscript(transcript: String): String {
-        val cleaned = transcript.trim().ifEmpty { "(kosong)" }
-        // sementara: 1 subtitle 00:00:00 -> 00:00:20
-        return """
-1
+    private fun defaultFolderName(): String {
+        val sdf = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
+        return "export_${sdf.format(Date())}"
+    }
+
+    // ---------- TEXT WRITER ----------
+    private fun writeTextToMovies(
+        context: Context,
+        relativeDir: String,
+        fileName: String,
+        mime: String,
+        content: String
+    ): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            writeTextMediaStore(context.contentResolver, relativeDir, fileName, mime, content)
+        } else {
+            writeTextLegacy(relativeDir, fileName, content)
+        }
+    }
+
+    private fun writeTextMediaStore(
+        resolver: ContentResolver,
+        relativeDir: String,
+        fileName: String,
+        mime: String,
+        content: String
+    ): Boolean {
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+            put(MediaStore.MediaColumns.MIME_TYPE, mime)
+            put(MediaStore.MediaColumns.RELATIVE_PATH, relativeDir)
+        }
+
+        val collection = MediaStore.Files.getContentUri("external")
+        val fileUri = resolver.insert(collection, values) ?: return false
+
+        return resolver.openOutputStream(fileUri, "w")?.use { out ->
+            out.write(content.toByteArray(Charsets.UTF_8))
+            out.flush()
+            true
+        } ?: false
+    }
+
+    private fun writeTextLegacy(relativeDir: String, fileName: String, content: String): Boolean {
+        // relativeDir contoh: Movies/AutoShorts/export_xxx
+        val base = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+        val targetDir = File(base, relativeDir.removePrefix("Movies/"))
+        if (!targetDir.exists()) targetDir.mkdirs()
+        val outFile = File(targetDir, fileName)
+        return try {
+            FileOutputStream(outFile).use { out ->
+                out.write(content.toByteArray(Charsets.UTF_8))
+                out.flush()
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    // ---------- VIDEO COPIER ----------
+    private fun copyVideoToMovies(
+        context: Context,
+        sourceUri: Uri,
+        relativeDir: String,
+        fileName: String
+    ): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            copyVideoMediaStore(context.contentResolver, sourceUri, relativeDir, fileName)
+        } else {
+            copyVideoLegacy(context.contentResolver, sourceUri, relativeDir, fileName)
+        }
+    }
+
+    private fun copyVideoMediaStore(
+        resolver: ContentResolver,
+        sourceUri: Uri,
+        relativeDir: String,
+        fileName: String
+    ): Boolean {
+        val values = ContentValues().apply {
+            put(MediaStore.Video.Media.DISPLAY_NAME, fileName)
+            put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+            put(MediaStore.Video.Media.RELATIVE_PATH, relativeDir)
+        }
+
+        val videoCollection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val destUri = resolver.insert(videoCollection, values) ?: return false
+
+        val input = resolver.openInputStream(sourceUri) ?: return false
+        val output = resolver.openOutputStream(destUri, "w") ?: return false
+
+        return input.use { ins ->
+            output.use { outs ->
+                ins.copyTo(outs, bufferSize = 1024 * 1024) // 1MB buffer
+                outs.flush()
+                true
+            }
+        }
+    }
+
+    private fun copyVideoLegacy(
+        resolver: ContentResolver,
+        sourceUri: Uri,
+        relativeDir: String,
+        fileName: String
+    ): Boolean {
+        val base = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+        val targetDir = File(base, relativeDir.removePrefix("Movies/"))
+        if (!targetDir.exists()) targetDir.mkdirs()
+
+        val destFile = File(targetDir, fileName)
+
+        val input = resolver.openInputStream(sourceUri) ?: return false
+        val output: OutputStream = FileOutputStream(destFile)
+
+        return input.use { ins ->
+            output.use { outs ->
+                ins.copyTo(outs, bufferSize = 1024 * 1024)
+                outs.flush()
+                true
+            }
+        }
+    }
+}1
 00:00:00,000 --> 00:00:20,000
 $cleaned
 
