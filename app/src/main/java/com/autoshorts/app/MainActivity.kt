@@ -33,19 +33,27 @@ class MainActivity : ComponentActivity() {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
-            Text("AutoShorts MVP", style = MaterialTheme.typography.headlineMedium)
+            Text("AutoShorts MVP")
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            Button(onClick = {
-                val path = Exporter.export(applicationContext)
-                status = "Hasil export: $path"
-                Toast.makeText(applicationContext, "Export berhasil", Toast.LENGTH_SHORT).show()
-            }) {
+            Button(
+                onClick = {
+                    // 🔥 INI FIX UTAMA
+                    val resultPath = Exporter.export(applicationContext)
+                    status = "Hasil export:\n$resultPath"
+
+                    Toast.makeText(
+                        applicationContext,
+                        "Export sukses",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            ) {
                 Text("Export")
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Text(status)
         }
