@@ -23,7 +23,6 @@ class MainActivity : ComponentActivity() {
             var selectedVideo by remember { mutableStateOf<Uri?>(null) }
             var status by remember { mutableStateOf("Belum ada video") }
 
-            // 🔹 LAUNCHER IMPORT VIDEO
             val videoPicker = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.GetContent()
             ) { uri ->
@@ -46,7 +45,6 @@ class MainActivity : ComponentActivity() {
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    // ✅ TOMBOL IMPORT
                     Button(
                         onClick = {
                             videoPicker.launch("video/*")
@@ -55,13 +53,11 @@ class MainActivity : ComponentActivity() {
                         Text("Import Video")
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
-
+                    Spacer(modifier = Modifier.height(12.dp))
                     Text(status)
 
-                    Spacer(modifier = Modifier.height(32.dp))
+                    Spacer(modifier = Modifier.height(30.dp))
 
-                    // ✅ TOMBOL EXPORT
                     Button(
                         enabled = selectedVideo != null,
                         onClick = {
@@ -69,8 +65,8 @@ class MainActivity : ComponentActivity() {
                                 videoUri = selectedVideo!!
                             )
 
-                            Exporter.export(this@MainActivity, meta)
-                            status = "Export selesai"
+                            Exporter.export(meta)
+                            status = "Export berhasil"
                         }
                     ) {
                         Text("Export")
