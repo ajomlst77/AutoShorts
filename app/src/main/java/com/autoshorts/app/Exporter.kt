@@ -3,11 +3,21 @@ package com.autoshorts.app
 object Exporter {
 
     /**
-     * Export sederhana (sementara).
-     * Nanti kalau kamu mau, bisa kita upgrade export beneran (copy video / render / dll).
+     * TANPA parameter context.
+     * Return: String (hasil export, misalnya JSON text)
      */
     fun export(meta: VideoMeta): String {
-        // Untuk sekarang: balikin string hasil export (dummy) biar app jalan dulu
-        return "Export OK: ${meta.videoUri}"
+        // Export sederhana: bikin JSON string dari meta
+        // (Kalau kamu mau format lain, bilang ya)
+        return """
+            {
+              "uri": "${meta.uri}",
+              "width": ${meta.width},
+              "height": ${meta.height},
+              "rotation": ${meta.rotation},
+              "mimeType": "${meta.mimeType}",
+              "fileSizeBytes": ${meta.fileSizeBytes}
+            }
+        """.trimIndent()
     }
 }
