@@ -1,10 +1,8 @@
 package com.autoshorts.app
 
-import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,16 +16,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-
-            var selectedVideoUri by remember { mutableStateOf<Uri?>(null) }
-
-            val pickVideoLauncher =
-                rememberLauncherForActivityResult(
-                    contract = ActivityResultContracts.GetContent()
-                ) { uri ->
-                    selectedVideoUri = uri
-                }
-
             Scaffold { padding ->
                 Column(
                     modifier = Modifier
@@ -39,19 +27,8 @@ class MainActivity : ComponentActivity() {
 
                     Button(
                         onClick = {
-                            pickVideoLauncher.launch("video/*")
-                        },
-                        modifier = Modifier.fillMaxWidth(0.8f)
-                    ) {
-                        Text("Import Video")
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Button(
-                        onClick = {
                             val meta = VideoMeta(
-                                videoUri = selectedVideoUri?.toString() ?: "",
+                                videoUri = "",
                                 width = 0,
                                 height = 0,
                                 rotation = 0,
@@ -59,11 +36,9 @@ class MainActivity : ComponentActivity() {
                                 fileSizeBytes = 0L
                             )
 
-                            val result = Exporter.export(meta)
-                            println(result)
+                            Exporter.export(meta)
                         },
-                        modifier = Modifier.fillMaxWidth(0.8f),
-                        enabled = selectedVideoUri != null
+                        modifier = Modifier.fillMaxWidth(0.8f)
                     ) {
                         Text("Export")
                     }
