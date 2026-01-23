@@ -3,11 +3,17 @@ package com.autoshorts.app
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -15,6 +21,7 @@ import androidx.compose.ui.unit.dp
 
 class MainActivity : ComponentActivity() {
 
+    @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -39,7 +46,7 @@ class MainActivity : ComponentActivity() {
                     )
                 },
                 onExport = {
-                    // kalau Exporter.export() butuh input video, nanti kita sambungkan dari selectedUri
+                    // Exporter.export() versi kamu sekarang tanpa parameter
                     val result = Exporter.export()
                     status = result
                 }
@@ -48,6 +55,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MainScreen(
     selectedVideo: Uri?,
@@ -56,9 +64,7 @@ private fun MainScreen(
     onExport: () -> Unit
 ) {
     Scaffold(
-        topBar = {
-            TopAppBar(title = { Text("AutoShorts") })
-        }
+        topBar = { TopAppBar(title = { Text("AutoShorts") }) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -85,10 +91,10 @@ private fun MainScreen(
 
             Button(
                 onClick = onExport,
+                enabled = selectedVideo != null,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
-                enabled = selectedVideo != null
+                    .height(56.dp)
             ) {
                 Text("Export")
             }
@@ -97,15 +103,9 @@ private fun MainScreen(
 
             if (selectedVideo != null) {
                 Text(
-                    text = "Dipilih: ${selectedVideo}",
+                    text = "Dipilih: $selectedVideo",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
 
-            if (statusText.isNotBlank()) {
-                Spacer(Modifier.height(8.dp))
-                Text(statusText, style = MaterialTheme.typography.bodySmall)
-            }
-        }
-    }
-}
+            if (statusText.is
