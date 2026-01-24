@@ -15,25 +15,12 @@ import androidx.compose.ui.unit.dp
 
 class MainActivity : ComponentActivity() {
 
-    // simpan video terpilih
     private var selectedVideoUri: Uri? = null
 
-    // launcher untuk pilih video
     private val pickVideoLauncher =
-        registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             if (uri != null) {
                 selectedVideoUri = uri
-
-                // ambil persist permission (biar aman kalau file manager tertentu)
-                try {
-                    contentResolver.takePersistableUriPermission(
-                        uri,
-                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    )
-                } catch (_: Exception) {
-                    // beberapa provider tidak support, aman diabaikan
-                }
-
                 Toast.makeText(this, "Video dipilih ✅", Toast.LENGTH_SHORT).show()
             } else {
                 Toast.makeText(this, "Batal pilih video", Toast.LENGTH_SHORT).show()
@@ -41,4 +28,76 @@ class MainActivity : ComponentActivity() {
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super
+        super.onCreate(savedInstanceState)
+
+        setContent {
+            MaterialTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+
+                        Text(
+                            text = "AutoShorts",
+                            style = MaterialTheme.typography.headlineMedium
+                        )
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                pickVideoLauncher.launch("video/*")
+                            }
+                        ) {
+                            Text("Import Video")
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                val uri = selectedVideoUri
+                                if (uri == null) {
+                                    Toast.makeText(
+                                        this@MainActivity,
+                                        "Import video dulu",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    return@Button
+                                }
+
+                                val meta = VideoAnalyzer.analyze(this@MainActivity, uri)
+                                val result = Exporter.export(meta)
+
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    result,
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        ) {
+                            Text("Export")
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Text(
+                            text = if (selectedVideoUri == null)
+                                "Belum ada video"
+                            else
+                                "Video siap diproses ✅"
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
