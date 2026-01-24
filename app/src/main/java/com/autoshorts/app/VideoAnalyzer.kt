@@ -1,5 +1,10 @@
 package com.autoshorts.app
 
-object VideoAnalyzer {
-    // sementara dikosongkan agar build stabil
-}
+data class VideoMeta(
+    val videoUri: String,
+    val width: Int,
+    val height: Int,
+    val rotation: Int,
+    val mimeType: String,
+    val fileSizeBytes: Long
+)
